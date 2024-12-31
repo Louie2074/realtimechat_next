@@ -1,101 +1,165 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useEffect, useState, useRef } from 'react';
+import { createClient } from '@/utils/supabase/client';
+
+type Message = {
+  id: string;
+  email: string;
+  message: string;
+  created_at: string;
+};
+
+const MESSAGES_PER_PAGE = 20;
+
+export default function App() {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const supabase = createClient();
+  const chatWindowRef = useRef<HTMLDivElement>(null);
+  const lastMessageRef = useRef<HTMLDivElement>(null);
+
+  const loadMoreMessages = async () => {
+    if (isLoading || !hasMore) return;
+    setIsLoading(true);
+
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(messages.length, messages.length + MESSAGES_PER_PAGE - 1);
+
+    if (error) {
+      console.error('Error loading messages:', error);
+      return;
+    }
+
+    if (data) {
+      if (data.length < MESSAGES_PER_PAGE) {
+        setHasMore(false);
+      }
+      setMessages((current) => [...current, ...data.reverse()]);
+    }
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    // Initial message load
+    const fetchInitialMessages = async () => {
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(MESSAGES_PER_PAGE);
+
+      if (data) setMessages(data.reverse());
+    };
+
+    // Subscribe to new messages
+    const channel = supabase
+      .channel('messages')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          // Ensure the payload.new has the correct type and all required fields
+          const newMessage = payload.new as Message;
+          if (
+            newMessage.id &&
+            newMessage.email &&
+            newMessage.message &&
+            newMessage.created_at
+          ) {
+            setMessages((current) => [...current, newMessage]);
+            // Scroll to bottom when new message arrives
+            setTimeout(() => {
+              lastMessageRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 100);
+          }
+        }
+      )
+      .subscribe();
+
+    fetchInitialMessages();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [supabase]);
+
+  // Intersection Observer for infinite scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMoreMessages();
+        }
+      },
+      { threshold: 0.5 }
+    );
+
+    if (chatWindowRef.current?.firstElementChild) {
+      observer.observe(chatWindowRef.current.firstElementChild);
+    }
+
+    return () => observer.disconnect();
+  }, [messages]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!newMessage.trim() || !user) return;
+
+    await supabase.from('messages').insert([
+      {
+        message: newMessage.trim(),
+        email: user.email,
+      },
+    ]);
+
+    setNewMessage('');
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="grid grid-rows-[auto_1fr_auto] items-center justify-items-center min-h-screen p-8 pb-20 gap-8 sm:p-20 font-[family-name:var(--font-geist-sans)]">
+      <div
+        ref={chatWindowRef}
+        className="w-full max-w-2xl h-[400px] border rounded-lg overflow-y-auto p-4 bg-slate-200"
+      >
+        {isLoading && <div className="text-center py-2">Loading...</div>}
+        {messages.map((msg, index) => (
+          <div
+            key={msg.id}
+            ref={index === messages.length - 1 ? lastMessageRef : null}
+            className="mb-4"
+          >
+            <div className="text-sm text-gray-500">{msg.email}</div>
+            <div className="bg-blue-50 p-3 rounded-lg shadow-md border border-blue-200">
+              {msg.message}
+            </div>
+          </div>
+        ))}
+      </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+      <form onSubmit={handleSubmit} className="w-full max-w-2xl flex gap-2">
+        <input
+          type="text"
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          placeholder="Type a message..."
+          className="flex-1 p-2 border rounded-lg"
+        />
+        <button
+          type="submit"
+          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          Send
+        </button>
+      </form>
     </div>
   );
 }
