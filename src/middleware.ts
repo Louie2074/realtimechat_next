@@ -5,6 +5,10 @@ import { createClient } from '@/utils/supabase/server';
 const protectedRoutes = ['/'];
 
 export async function middleware(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith('/auth')) {
+    return NextResponse.next();
+  }
+
   const response = NextResponse.next({
     request,
   });
@@ -14,11 +18,6 @@ export async function middleware(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  if (user && request.nextUrl.pathname.startsWith('/auth')) {
-    const redirectUrl = new URL('/', request.url);
-    return NextResponse.redirect(redirectUrl);
-  }
 
   const isProtectedRoute = protectedRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
