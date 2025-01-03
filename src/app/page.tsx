@@ -78,10 +78,10 @@ export default function App() {
   };
 
   return (
-    <div className="grid grid-rows-[auto_1fr_auto] items-center justify-items-center min-h-screen p-8 pb-20 gap-8 sm:p-20 font-[family-name:var(--font-geist-sans)]">
+    <div className="fixed inset-0 flex flex-col pt-24">
       <div
         ref={chatWindowRef}
-        className="w-full max-w-2xl h-[400px] border rounded-lg overflow-y-auto p-4 bg-slate-200"
+        className="w-full max-w-2xl mx-auto border rounded-lg overflow-y-auto p-4 bg-slate-200 h-[calc(100vh-20rem)]"
       >
         {messages.map((msg, index) => (
           <div
@@ -89,15 +89,18 @@ export default function App() {
             ref={index === messages.length - 1 ? lastMessageRef : null}
             className="mb-4"
           >
-            <div className="text-sm text-gray-500">{msg.email}</div>
-            <div className="bg-blue-50 p-3 rounded-lg shadow-md border border-blue-200">
+            <div className="text-xs text-gray-500">{msg.email}</div>
+            <div className="bg-blue-50 p-2 rounded-lg shadow-sm border border-blue-200">
               {msg.message}
             </div>
           </div>
         ))}
       </div>
 
-      <form onSubmit={handleSubmit} className="w-full max-w-2xl flex gap-2">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-2xl mx-auto flex gap-2 h-8 mt-4"
+      >
         <input
           type="text"
           value={newMessage}
