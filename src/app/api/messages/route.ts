@@ -19,7 +19,10 @@ export async function GET() {
     return NextResponse.json(data.reverse());
   } catch (error) {
     return NextResponse.json(
-      { error: 'Error fetching messages' },
+      {
+        error:
+          error instanceof Error ? error.message : 'Error fetching messages',
+      },
       { status: 500 }
     );
   }
@@ -47,7 +50,10 @@ export async function POST(request: Request) {
     return NextResponse.json(data);
   } catch (error) {
     return NextResponse.json(
-      { error: 'Error creating message' },
+      {
+        error:
+          error instanceof Error ? error.message : 'Error creating message',
+      },
       { status: 500 }
     );
   }
